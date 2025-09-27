@@ -1,41 +1,60 @@
-# Prerequisites
-*.d
+# Build results
+[Bb]in/
+[Oo]bj/
+out/
+build/
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# Visual Studio files
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.VC.opendb
+.vs/
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
+# Windows generated files
 *.exe
-*.out
-*.app
+*.dll
+*.lib
+*.pdb
+*.idb
+*.ilk
+*.log
 
-# debug information files
-*.dwo
+# Precompiled headers
+*.pch
+*.gch
+
+# Backup & temp files
+*~
+*.bak
+*.tmp
+*.swp
+*.swn
+
+# Crash dumps
+*.dmp
+
+# Compiled object files
+*.obj
+*.o
+
+# Clangd, LSP, etc.
+.cache/
+.clangd/
+compile_commands.json
+
+# NuGet / Packages
+packages/
+*.nupkg
+
+# Visual Studio Code workspace settings
+*.code-workspace
+
+# Others
+*.tlog
+*.lastbuildstate
+ipch/
+*.ipch
