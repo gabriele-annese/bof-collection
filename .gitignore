@@ -3,6 +3,8 @@
 [Oo]bj/
 out/
 build/
+x64/
+Release/
 
 # Visual Studio files
 .vscode/
